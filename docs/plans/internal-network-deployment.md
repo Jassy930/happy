@@ -1083,76 +1083,76 @@ export default {
   - 测试一键部署
 ```
 
-### Phase 2: CLI 改造
+### Phase 2: CLI 改造（✅ 已完成）
+
+> 已实现并提交到 `feat/internal-network-deployment` 分支。
+> Commit: `8c2b23b9` — https://github.com/Jassy930/happy/tree/feat/internal-network-deployment
 
 ```
-任务 2.1: 修改默认配置
-  - configuration.ts: 默认 serverUrl 改为环境变量读取
-  - 移除硬编码 https://api.cluster-fluster.com
+任务 2.1: 修改默认配置 ✅
+  - configuration.ts: 默认 serverUrl 改为 http://localhost:3005
+  - 通过 HAPPY_SERVER_URL 环境变量覆盖
 
-任务 2.2: 改造认证流程
-  - auth.ts: 实现 loginWithCredentials()
-  - auth.ts: QR 码内容改为 happy-local://{serverUrl}
-  - persistence.ts: 新增 credentials.json 读写
-  - index.ts: 新增 happy login 子命令
+任务 2.2: 改造认证流程 ✅
+  - api/auth.ts: 新增 loginWithCredentials() 和 registerWithCredentials()
+  - persistence.ts: 新增 writeCredentialsLocal()（生成本地加密密钥 + 保存 JWT）
+  - ui/auth.ts: 新增 doLocalAuth() 用户名密码交互式登录
+  - index.ts: 新增顶层 happy login 快捷命令
+  - HAPPY_AUTH_MODE=local 时自动使用用户名密码认证
+  - HAPPY_AUTH_MODE=legacy 时保留原版 QR/Web 认证
 
-任务 2.3: 删除 OAuth 代码
-  - 删除 Claude/OpenAI/Google OAuth 流程
+任务 2.3: 删除 OAuth 代码（暂缓）
+  - OAuth 代码已注释但未删除，保留兼容性
   - （注：gemini/ 目录不存在，无需处理）
 
-任务 2.4: 评估 happy-agent 改造（如需使用）
-  - 检查 happy-agent 的 serverUrl 和认证逻辑
-  - 同步改造认证方式
+任务 2.4: 评估 happy-agent 改造（暂缓）
+  - happy-agent 使用相同的 serverUrl + 认证模式
+  - 如需使用需同步改造
 ```
 
-### Phase 3: App 改造
+### Phase 3: App 改造（✅ 已完成）
 
+> 已实现并提交到 `feat/internal-network-deployment` 分支。
+> Commit: `cf52dfad` — https://github.com/Jassy930/happy/tree/feat/internal-network-deployment
+>
 > **总体结论**: App 可在内网完全复用。核心架构（Server URL 可配、Socket.IO 纯 HTTP、资源本地打包）已具备内网友好特性。改造重点是禁用外部依赖 + 新增登录界面。
 
 ```
-任务 3.1: 修复硬性阻塞项（必须，否则 App 无法正常使用）
+任务 3.1: 修复硬性阻塞项 ✅
   - 禁用 Expo Updates:
-    - app.config.js: 移除 updates 配置段
-    - 或 sources/hooks/useUpdates.ts: 添加早期返回
+    - sources/hooks/useUpdates.ts: HAPPY_AUTH_MODE=local 时跳过 OTA 检查
   - 修复推送注册:
-    - sources/sync/pushRegistration.ts: 加强 try-catch
-    - 跳过 getExpoPushTokenAsync() 在无网络时的调用
-  - 修复 App 启动卡死:
-    - 为 syncRestore() 添加超时机制
-    - Server 不可达时显示离线提示而非卡在启动页
+    - sources/sync/pushRegistration.ts: syncCurrentPushToken 包裹 try-catch
+    - 内网环境离线时不崩溃，返回 registered: false
+  - App 启动卡死修复（待联调验证）:
+    - syncRestore() 超时机制待后续添加
 
-任务 3.2: 修改服务器配置
-  - serverConfig.ts: 默认值改为空，强制用户配置
+任务 3.2: 修改服务器配置 ✅
+  - serverConfig.ts: 默认值改为环境变量优先，fallback http://localhost:3005
   - 构建时通过 EXPO_PUBLIC_HAPPY_SERVER_URL 注入内网 Server 地址
   - 保留设置页面（sources/app/(app)/server.tsx）手动输入入口
 
-任务 3.3: 改造认证界面
-  - 新增注册界面（用户名 + 密码）
-  - 新增登录界面
-  - JWT Token 存储到 SecureStore / localStorage
-  - 保留 QR 码流程作为 fallback
+任务 3.3: 改造认证界面 ✅
+  - 新增 sources/auth/localAuth.ts: localLogin() / localRegister() API
+  - 新增 sources/app/(app)/local-login.tsx: 登录/注册界面
+    - 支持登录/注册模式切换
+    - 错误提示（用户名已存在、密码错误等）
+    - 本地生成加密密钥保持 e2e 加密兼容
+  - 欢迎页 index.tsx: EXPO_PUBLIC_HAPPY_AUTH_MODE=local 时显示 "Login / Register"
+  - 保留 QR 码流程和 restore 流程作为 fallback
 
-任务 3.4: 移除/禁用外部依赖
-  - 删除 google-services.json / Firebase 配置
-  - 删除 LiveKit / realtime 目录
-  - 删除 RevenueCat / revenueCat 目录（sources/sync/revenueCat/）
-  - 修改 app.config.js:
-    - bundle id 改为公司标识
-    - 移除 associatedDomains
-    - 移除 ElevenLabs Agent ID
-    - 移除 RevenueCat 配置
-    - 移除 @livekit/react-native-expo-plugin
-    - 移除 expo-updates 配置
+任务 3.4: 移除/禁用外部依赖 ✅（部分）
+  - app.config.js: 注释掉 googleServicesFile、LiveKit/WebRTC 插件
   - 环境变量控制（不设置即禁用）:
-    - 不设 EXPO_PUBLIC_POSTHOG_API_KEY
-    - 不设 EXPO_PUBLIC_REVENUE_CAT_*
+    - 不设 EXPO_PUBLIC_POSTHOG_API_KEY → PostHog 不初始化
+    - 不设 EXPO_PUBLIC_REVENUE_CAT_* → RevenueCat 不初始化
+  - 待后续清理: 删除 realtime/ 目录、revenueCat/ 目录、google-services.json
 
-任务 3.5: 修复 Mermaid CDN 依赖（可选）
+任务 3.5: 修复 Mermaid CDN 依赖（待后续处理）
   - sources/components/markdown/MermaidRenderer.tsx:113
-  - Native 端 WebView 加载 https://cdn.jsdelivr.net/npm/mermaid@11/
-  - 方案: 打包本地 mermaid.js 或降级显示纯文本
+  - 需要打包本地 mermaid.js 或降级显示
 
-任务 3.6: 构建内部分发包
+任务 3.6: 构建内部分发包（待联调后执行）
   - Android: 构建 APK
   - iOS: 企业签名或 TestFlight
 ```
