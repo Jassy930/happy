@@ -73,6 +73,18 @@ import { handleResumeCommand } from '@/resume/handleResumeCommand'
       process.exit(1)
     }
     return;
+  } else if (subcommand === 'login') {
+    // Shortcut for 'happy auth login'
+    try {
+      await handleAuthCommand(['login', ...args.slice(1)]);
+    } catch (error) {
+      console.error(chalk.red('Error:'), error instanceof Error ? error.message : 'Unknown error')
+      if (process.env.DEBUG) {
+        console.error(error)
+      }
+      process.exit(1)
+    }
+    return;
   } else if (subcommand === 'connect') {
     // Handle connect subcommands
     try {

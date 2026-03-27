@@ -46,9 +46,10 @@ ${chalk.bold('Usage:')}
 ${chalk.bold('Options:')}
   --force    Clear credentials, machine ID, and stop daemon before re-auth
 
-${chalk.gray('PS: Your master secret never leaves your mobile/web device. Each CLI machine')}
-${chalk.gray('receives only a derived key for per-machine encryption, so backup codes')}
-${chalk.gray('cannot be displayed from the CLI.')}
+${chalk.bold('Environment:')}
+  HAPPY_AUTH_MODE=local    Use username/password authentication (internal network)
+  HAPPY_AUTH_MODE=legacy   Use QR code/web authentication (default for public deployment)
+  HAPPY_SERVER_URL         Server URL (default: http://localhost:3005)
 `);
 }
 

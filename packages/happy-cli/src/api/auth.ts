@@ -41,3 +41,33 @@ export function generateAppUrl(secret: Uint8Array): string {
   const secretBase64Url = encodeBase64Url(secret);
   return `handy://${secretBase64Url}`;
 }
+
+/**
+ * Login with username and password (local auth mode for internal network deployment)
+ * @returns Object with token, userId, and username from the server
+ */
+export async function loginWithCredentials(
+  username: string,
+  password: string
+): Promise<{ success: boolean; token: string; userId: string; username: string }> {
+  const response = await axios.post(`${configuration.serverUrl}/v1/auth/login`, {
+    username,
+    password,
+  });
+  return response.data;
+}
+
+/**
+ * Register a new user with username and password (local auth mode)
+ * @returns Object with token, userId, and username from the server
+ */
+export async function registerWithCredentials(
+  username: string,
+  password: string
+): Promise<{ success: boolean; token: string; userId: string; username: string }> {
+  const response = await axios.post(`${configuration.serverUrl}/v1/auth/register`, {
+    username,
+    password,
+  });
+  return response.data;
+}

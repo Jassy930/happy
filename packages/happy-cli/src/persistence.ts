@@ -282,6 +282,30 @@ export async function clearCredentials(): Promise<void> {
   }
 }
 
+/**
+ * Write credentials for local auth mode (username/password + JWT).
+ * Generates a local encryption key since there's no mobile app to share keys with.
+ */
+export async function writeCredentialsLocal(credentials: { token: string }): Promise<Credentials> {
+  if (!existsSync(configuration.happyHomeDir)) {
+    await mkdir(configuration.happyHomeDir, { recursive: true })
+  }
+  // Generate a local encryption key for e2e encryption of session data
+  const { randomBytes } = await import('node:crypto');
+  const secret = new Uint8Array(randomBytes(32));
+  await writeFile(configuration.privateKeyFile, JSON.stringify({
+    secret: encodeBase64(secret),
+    token: credentials.token
+  }, null, 2));
+  return {
+    token: credentials.token,
+    encryption: {
+      type: 'legacy',
+      secret: secret
+    }
+  };
+}
+
 export async function clearMachineId(): Promise<void> {
   await updateSettings(settings => ({
     ...settings,

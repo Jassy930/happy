@@ -5,7 +5,7 @@ import tweetnacl from 'tweetnacl';
 import axios from 'axios';
 import { displayQRCode } from "./qrcode";
 import { delay } from "@/utils/time";
-import { writeCredentialsLegacy, readCredentials, updateSettings, Credentials, writeCredentialsDataKey } from "@/persistence";
+import { writeCredentialsLegacy, readCredentials, updateSettings, Credentials, writeCredentialsDataKey, writeCredentialsLocal } from "@/persistence";
 import { generateWebAuthUrl } from "@/api/webAuth";
 import { openBrowser } from "@/utils/browser";
 import { AuthSelector, AuthMethod } from "./ink/AuthSelector";
@@ -13,8 +13,95 @@ import { render } from 'ink';
 import React from 'react';
 import { randomUUID } from 'node:crypto';
 import { logger } from './logger';
+import { loginWithCredentials, registerWithCredentials } from "@/api/auth";
+import { createInterface } from 'node:readline';
+
+const AUTH_MODE = process.env.HAPPY_AUTH_MODE || 'local';
+
+/**
+ * Prompt for username/password input in local auth mode
+ */
+async function doLocalAuth(): Promise<Credentials | null> {
+    const rl = createInterface({
+        input: process.stdin,
+        output: process.stdout
+    });
+
+    const question = (prompt: string): Promise<string> => {
+        return new Promise((resolve) => {
+            rl.question(prompt, resolve);
+        });
+    };
+
+    console.clear();
+    console.log('\n  Happy - Local Authentication\n');
+    console.log('  Server: ' + configuration.serverUrl + '\n');
+
+    try {
+        const username = await question('  Username: ');
+        if (!username.trim()) {
+            console.log('\n  Username cannot be empty.\n');
+            rl.close();
+            return null;
+        }
+
+        // Use a simple approach for password - read from stdin
+        const password = await question('  Password: ');
+        if (!password.trim()) {
+            console.log('\n  Password cannot be empty.\n');
+            rl.close();
+            return null;
+        }
+
+        console.log('');
+
+        // Try login first
+        try {
+            const result = await loginWithCredentials(username.trim(), password);
+            const credentials = await writeCredentialsLocal({ token: result.token });
+            console.log('  ✓ Login successful\n');
+            rl.close();
+            return credentials;
+        } catch (loginError: any) {
+            // If 401 (wrong password), show error
+            if (loginError?.response?.status === 401) {
+                // User might not exist, try to register
+                console.log('  User not found, attempting registration...');
+                try {
+                    const result = await registerWithCredentials(username.trim(), password);
+                    const credentials = await writeCredentialsLocal({ token: result.token });
+                    console.log('  ✓ Registration successful\n');
+                    rl.close();
+                    return credentials;
+                } catch (registerError: any) {
+                    if (registerError?.response?.status === 409) {
+                        console.log('  ✗ Username exists but password is incorrect.\n');
+                    } else {
+                        console.log('  ✗ Registration failed: ' + (registerError?.response?.data?.error || registerError.message) + '\n');
+                    }
+                    rl.close();
+                    return null;
+                }
+            } else {
+                console.log('  ✗ Login failed: ' + (loginError?.response?.data?.error || loginError.message) + '\n');
+                rl.close();
+                return null;
+            }
+        }
+    } catch (error) {
+        console.log('\n  Authentication failed. Please check server connectivity.\n');
+        rl.close();
+        return null;
+    }
+}
 
 export async function doAuth(): Promise<Credentials | null> {
+    // Use local auth (username/password) for internal network deployment
+    if (AUTH_MODE === 'local') {
+        return await doLocalAuth();
+    }
+
+    // Legacy auth flow (QR code / web)
     console.clear();
 
     // Show authentication method selector
