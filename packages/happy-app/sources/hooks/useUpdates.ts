@@ -30,6 +30,11 @@ export function useUpdates() {
             return;
         }
 
+        // Skip OTA updates in internal network deployment (no Expo Update server)
+        if (process.env.EXPO_PUBLIC_HAPPY_AUTH_MODE === 'local') {
+            return;
+        }
+
         if (isChecking) {
             return;
         }

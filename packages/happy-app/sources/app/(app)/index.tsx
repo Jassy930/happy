@@ -15,6 +15,8 @@ import { HomeHeaderNotAuth } from "@/components/HomeHeader";
 import { MainView } from "@/components/MainView";
 import { t } from '@/text';
 
+const AUTH_MODE = process.env.EXPO_PUBLIC_HAPPY_AUTH_MODE || 'local';
+
 export default function Home() {
     const auth = useAuth();
     if (!auth.isAuthenticated) {
@@ -62,7 +64,27 @@ function NotAuthenticated() {
             <Text style={styles.subtitle}>
                 {t('welcome.subtitle')}
             </Text>
-            {Platform.OS !== 'android' && Platform.OS !== 'ios' ? (
+            {AUTH_MODE === 'local' ? (
+                <>
+                    <View style={styles.buttonContainer}>
+                        <RoundButton
+                            title="Login / Register"
+                            onPress={() => router.push('/local-login')}
+                        />
+                    </View>
+                    <View style={styles.buttonContainerSecondary}>
+                        <RoundButton
+                            size="normal"
+                            title={t('welcome.linkOrRestoreAccount')}
+                            onPress={() => {
+                                trackAccountRestored();
+                                router.push('/restore');
+                            }}
+                            display="inverted"
+                        />
+                    </View>
+                </>
+            ) : Platform.OS !== 'android' && Platform.OS !== 'ios' ? (
                 <>
                     <View style={styles.buttonContainer}>
                         <RoundButton
@@ -123,7 +145,27 @@ function NotAuthenticated() {
                     <Text style={styles.landscapeSubtitle}>
                         {t('welcome.subtitle')}
                     </Text>
-                    {Platform.OS !== 'android' && Platform.OS !== 'ios'
+                    {AUTH_MODE === 'local' ? (
+                        <>
+                            <View style={styles.landscapeButtonContainer}>
+                                <RoundButton
+                                    title="Login / Register"
+                                    onPress={() => router.push('/local-login')}
+                                />
+                            </View>
+                            <View style={styles.landscapeButtonContainerSecondary}>
+                                <RoundButton
+                                    size="normal"
+                                    title={t('welcome.linkOrRestoreAccount')}
+                                    onPress={() => {
+                                        trackAccountRestored();
+                                        router.push('/restore');
+                                    }}
+                                    display="inverted"
+                                />
+                            </View>
+                        </>
+                    ) : Platform.OS !== 'android' && Platform.OS !== 'ios'
                         ? (<>
                             <View style={styles.landscapeButtonContainer}>
                                 <RoundButton

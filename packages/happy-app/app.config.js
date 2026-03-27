@@ -64,7 +64,7 @@ export default {
                 "android.permission.READ_MEDIA_VIDEO",
             ],
             package: bundleId,
-            googleServicesFile: "./google-services.json",
+            // googleServicesFile: "./google-services.json", // Removed for internal network deployment
             intentFilters: variant === 'production' ? [
                 {
                     "action": "VIEW",
@@ -102,8 +102,8 @@ export default {
             "react-native-vision-camera",
             "@more-tech/react-native-libsodium",
             "react-native-audio-api",
-            "@livekit/react-native-expo-plugin",
-            "@config-plugins/react-native-webrtc",
+            // "@livekit/react-native-expo-plugin", // Removed for internal network deployment
+            // "@config-plugins/react-native-webrtc", // Removed for internal network deployment
             [
                 "expo-audio",
                 {

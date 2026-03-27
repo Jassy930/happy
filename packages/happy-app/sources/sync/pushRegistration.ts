@@ -179,26 +179,37 @@ export async function syncCurrentPushToken(credentials: AuthCredentials): Promis
         };
     }
 
-    const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
-    const currentToken = tokenData.data;
-    const previousToken = loadRegisteredPushToken();
+    try {
+        const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
+        const currentToken = tokenData.data;
+        const previousToken = loadRegisteredPushToken();
 
-    await registerPushToken(credentials, currentToken);
-    saveRegisteredPushToken(currentToken);
+        await registerPushToken(credentials, currentToken);
+        saveRegisteredPushToken(currentToken);
 
-    if (previousToken && previousToken !== currentToken) {
-        try {
-            await unregisterPushToken(credentials, previousToken);
-        } catch (error) {
-            console.log('Failed to unregister previous push token:', error);
+        if (previousToken && previousToken !== currentToken) {
+            try {
+                await unregisterPushToken(credentials, previousToken);
+            } catch (error) {
+                console.log('Failed to unregister previous push token:', error);
+            }
         }
-    }
 
-    return {
-        registered: true,
-        token: currentToken,
-        permission,
-    };
+        return {
+            registered: true,
+            token: currentToken,
+            permission,
+        };
+    } catch (error) {
+        // Gracefully handle push token registration failure
+        // (e.g. internal network deployment without Expo Push service)
+        console.log('Failed to get/register push token (may be expected in internal network):', error);
+        return {
+            registered: false,
+            token: loadRegisteredPushToken(),
+            permission,
+        };
+    }
 }
 
 export async function removePushToken(credentials: AuthCredentials, token: string): Promise<void> {
