@@ -302,27 +302,44 @@ JWT_SECRET=<随机生成>
 
 ### 3.3 App (happy-app) 外网通信点
 
+> **结论：App 可以在内网环境完全复用，但需要少量修改。** 以下为详细调研结果。
+
 #### 3.3.1 服务器配置
 
 | 配置 | 值 | 位置 |
 |------|-----|------|
-| 默认服务器 | `https://api.cluster-fluster.com` | `sources/sync/serverConfig.ts` |
-| 自定义服务器 | MMKV `custom-server-url` key | 用户可配置 |
+| 默认服务器 | `https://api.cluster-fluster.com` | `sources/sync/serverConfig.ts:8` |
+| 自定义服务器 | MMKV `custom-server-url` key | 用户可配置（设置页面） |
 | 环境变量 | `EXPO_PUBLIC_HAPPY_SERVER_URL` | 构建时配置 |
+| 设置界面 | `sources/app/(app)/server.tsx` | 运行时手动输入 |
 
-**改造**: 修改默认值，或构建时通过环境变量注入。
+**改造**: 构建时通过环境变量注入内网 Server 地址。App 已有手动设置 Server 地址的 UI，用户也可在设置中切换。
 
-#### 3.3.2 外部服务
+#### 3.3.2 外部服务依赖详细分析
 
-| 服务 | URL/配置 | 用途 | 处理 |
-|------|---------|------|------|
-| PostHog | `https://us.i.posthog.com` | 数据分析 | **保留代码，后续内网部署** |
-| Expo Updates | `https://u.expo.dev/{projectId}` | OTA 更新 | **保留代码，后续处理** |
-| Firebase | `google-services.json` | 推送+分析 | **删除** |
-| LiveKit | `@livekit/react-native` | 语音通话 | **删除** |
-| ElevenLabs | Agent IDs | 语音合成 | **删除** |
+| 服务 | URL/配置 | 分类 | 内网影响 | 处理方案 |
+|------|---------|------|---------|---------|
+| Expo OTA Updates | `https://u.expo.dev/{projectId}` | **硬性阻塞** | 每次 App 切回前台尝试连接，造成超时延迟 | 构建时禁用 expo-updates 插件 |
+| Expo Push Notifications | Expo Push Service | **硬性阻塞** | `getExpoPushTokenAsync()` 需连接 Expo 服务器，导致推送注册失败 | 加强错误处理，跳过推送注册 |
+| PostHog | `https://us.i.posthog.com` | **软性阻塞** | 分析事件超时，造成可见延迟 | **不设置** `EXPO_PUBLIC_POSTHOG_API_KEY` 即可禁用 |
+| Firebase | `google-services.json` | **软性阻塞** | FCM 推送不可用 | **删除** 配置文件 |
+| LiveKit | `@livekit/react-native` | **软性阻塞** | 语音通话不可用 | **删除** realtime/ 目录 |
+| ElevenLabs | Agent IDs | **软性阻塞** | 语音合成不可用，已有错误处理 | **删除** 相关配置 |
+| RevenueCat | `api.revenuecat.com` | **软性阻塞** | 订阅功能失效 | **不设置** RevenueCat 环境变量即可禁用 |
+| Mermaid CDN | `https://cdn.jsdelivr.net/npm/mermaid@11/` | **软性阻塞** | Native 端图表不渲染（Web 端用本地版本） | 打包本地 mermaid.js 或降级显示 |
 
-#### 3.3.3 App 分发配置
+#### 3.3.3 已具备的内网友好特性（无需修改）
+
+| 特性 | 说明 | 位置 |
+|------|------|------|
+| Server URL 完全可配 | 环境变量 + 设置界面双入口 | `serverConfig.ts` |
+| Socket.IO 支持纯 HTTP | `transports: ['websocket']`，不要求 HTTPS/WSS | `apiSocket.ts:59-70` |
+| 字体/资源全部本地打包 | IBMPlexSans、FontAwesome 等均内置 | `_layout.tsx:100-161` |
+| 开发环境自动登录 | `EXPO_PUBLIC_DEV_TOKEN` + `EXPO_PUBLIC_DEV_SECRET` 环境变量 | `_layout.tsx:169-176` |
+| Deep linking 仅生产构建 | 开发/预览构建不依赖公网 DNS | `app.config.js:44,75` |
+| 手动恢复认证 | 支持密钥手动输入绕过 QR 流程 | `sources/app/(app)/restore/manual.tsx` |
+
+#### 3.3.4 App 分发配置
 
 | 配置 | 原始值 | 处理 |
 |------|--------|------|
@@ -330,23 +347,54 @@ JWT_SECRET=<随机生成>
 | Android Package | `com.ex3ndr.happy` | 改为公司 Package Name |
 | App Store Connect | Apple ID `steve@bulkovo.com` | **删除** |
 | EAS Project ID | `4558dd3d-cd5a-47cd-bad9-e591a241cc06` | **删除或替换** |
-| Associated Domains | `applinks:app.happy.engineering` | **删除** |
+| Associated Domains | `applinks:app.happy.engineering` | **删除**（仅生产构建启用） |
 
-#### 3.3.4 认证流程
+#### 3.3.5 认证流程
 
-- `sources/auth/`: QR 码扫描 + cryptographic 认证
-- `POST /v1/auth/account/request` 和 `/v1/auth/account/response`
-- OAuth: `https://console.anthropic.com/v1/oauth/token`
+- `sources/auth/authQRStart.ts`: 生成密钥对，POST 到 `/v1/auth/account/request`
+- `sources/auth/authQRWait.ts`: 每秒轮询认证状态
+- `sources/auth/authChallenge.ts`: sodium 签名 challenge-response
+- Token 存储: `sources/auth/tokenStorage.ts` — Native 用 `expo-secure-store`，Web 用 `localStorage`
 
-**改造**: 改为用户名密码注册/登录界面。
+**改造**: 新增用户名密码登录界面，替代 QR 码流程。保留 QR 流程作为 fallback。
 
-#### 3.3.5 WebSocket 连接
+#### 3.3.6 App 启动序列分析
 
-- Socket.io 连接到 `${serverUrl}/v1/updates`
-- 仅 WebSocket 传输
-- 自动重连 + 指数退避
+```
+1. 字体加载                → 本地 (无网络)
+2. Sodium 库初始化         → 本地 (无网络)
+3. 凭证检查               → 本地存储 (无网络)
+4. DEV 凭证检查            → 环境变量 (无网络)
+5. syncRestore() 启动      → ⚠️ 网络调用开始
+   ├── 连接 Server 初始化同步
+   ├── Expo Updates 后台检查    ← 硬性阻塞
+   ├── PostHog 初始化（如有 key）← 软性阻塞
+   └── Push Token 注册          ← 硬性阻塞
+```
 
-**改造**: 不需改动，只改 serverUrl。
+> **风险**: 如果步骤 5 中 Server 不可达，App 会卡在启动页。需要添加超时和离线提示。
+
+#### 3.3.7 WebSocket 连接
+
+- 连接到 `${serverUrl}/v1/updates`（Socket.io）
+- 传输方式: 仅 WebSocket（`transports: ['websocket']`）
+- 自动重连: 指数退避
+- 认证: Bearer token 通过 socket auth 传递
+
+**改造**: 不需改动，只改 serverUrl 即可。
+
+#### 3.3.8 内网构建环境变量
+
+```bash
+# 必须设置
+EXPO_PUBLIC_HAPPY_SERVER_URL=http://192.168.1.50:3005
+
+# 以下变量不设置即可禁用对应功能
+# EXPO_PUBLIC_POSTHOG_API_KEY=
+# EXPO_PUBLIC_REVENUE_CAT_APPLE=
+# EXPO_PUBLIC_REVENUE_CAT_GOOGLE=
+# EXPO_PUBLIC_REVENUE_CAT_STRIPE=
+```
 
 ---
 
@@ -1004,7 +1052,10 @@ export default {
 
 ## 10. 实施计划
 
-### Phase 1: Server 改造（优先级最高）
+### Phase 1: Server 改造（✅ 已完成）
+
+> 已实现并提交到 `feat/internal-network-deployment` 分支。
+> Commit: `73860978` — https://github.com/Jassy930/happy/tree/feat/internal-network-deployment
 
 ```
 任务 1.1: 新增本地认证模块
@@ -1056,18 +1107,32 @@ export default {
 
 ### Phase 3: App 改造
 
-```
-任务 3.1: 修改服务器配置
-  - serverConfig.ts: 默认值改为空，强制用户配置
-  - 新增服务器地址手动输入界面
+> **总体结论**: App 可在内网完全复用。核心架构（Server URL 可配、Socket.IO 纯 HTTP、资源本地打包）已具备内网友好特性。改造重点是禁用外部依赖 + 新增登录界面。
 
-任务 3.2: 改造认证界面
-  - 扫码流程: 解析 Server 地址（而非密钥）
+```
+任务 3.1: 修复硬性阻塞项（必须，否则 App 无法正常使用）
+  - 禁用 Expo Updates:
+    - app.config.js: 移除 updates 配置段
+    - 或 sources/hooks/useUpdates.ts: 添加早期返回
+  - 修复推送注册:
+    - sources/sync/pushRegistration.ts: 加强 try-catch
+    - 跳过 getExpoPushTokenAsync() 在无网络时的调用
+  - 修复 App 启动卡死:
+    - 为 syncRestore() 添加超时机制
+    - Server 不可达时显示离线提示而非卡在启动页
+
+任务 3.2: 修改服务器配置
+  - serverConfig.ts: 默认值改为空，强制用户配置
+  - 构建时通过 EXPO_PUBLIC_HAPPY_SERVER_URL 注入内网 Server 地址
+  - 保留设置页面（sources/app/(app)/server.tsx）手动输入入口
+
+任务 3.3: 改造认证界面
   - 新增注册界面（用户名 + 密码）
   - 新增登录界面
-  - JWT Token 存储到 MMKV
+  - JWT Token 存储到 SecureStore / localStorage
+  - 保留 QR 码流程作为 fallback
 
-任务 3.3: 移除外部依赖
+任务 3.4: 移除/禁用外部依赖
   - 删除 google-services.json / Firebase 配置
   - 删除 LiveKit / realtime 目录
   - 删除 RevenueCat / revenueCat 目录（sources/sync/revenueCat/）
@@ -1077,8 +1142,17 @@ export default {
     - 移除 ElevenLabs Agent ID
     - 移除 RevenueCat 配置
     - 移除 @livekit/react-native-expo-plugin
+    - 移除 expo-updates 配置
+  - 环境变量控制（不设置即禁用）:
+    - 不设 EXPO_PUBLIC_POSTHOG_API_KEY
+    - 不设 EXPO_PUBLIC_REVENUE_CAT_*
 
-任务 3.4: 构建内部分发包
+任务 3.5: 修复 Mermaid CDN 依赖（可选）
+  - sources/components/markdown/MermaidRenderer.tsx:113
+  - Native 端 WebView 加载 https://cdn.jsdelivr.net/npm/mermaid@11/
+  - 方案: 打包本地 mermaid.js 或降级显示纯文本
+
+任务 3.6: 构建内部分发包
   - Android: 构建 APK
   - iOS: 企业签名或 TestFlight
 ```
@@ -1117,14 +1191,19 @@ export default {
 
 ## 11. 风险与缓解
 
-| 风险 | 影响 | 缓解方案 |
-|------|------|----------|
-| Expo Push 无法内网使用 | 手机无法收到后台推送 | WebSocket 在线通知 + 前台保活 |
-| Expo Updates 无法内网使用 | App 无法 OTA 更新 | 重新构建 APK/IPA 分发 |
-| iOS 企业签名成本 | 需要 $299/年 | TestFlight 或源码编译 |
-| 内网 IP 变化 | CLI/App 需要重新配置 | 使用内网 DNS 或固定 IP |
-| 端到端加密密钥管理 | 用户切换设备需重新配置 | 保留原版密钥同步机制 |
-| PostgreSQL 数据备份 | 数据丢失风险 | Docker volume 备份策略 |
+| 风险 | 分类 | 影响 | 缓解方案 |
+|------|------|------|----------|
+| Expo Updates 超时 | **硬性阻塞** | App 每次切回前台卡顿 3-5 秒 | 构建时禁用 expo-updates 插件 |
+| Expo Push Token 注册失败 | **硬性阻塞** | 推送注册异常 | 加强 try-catch，无网络时跳过 |
+| App 启动时 Server 不可达 | **硬性阻塞** | App 卡在启动页 | syncRestore() 添加超时 + 离线提示 |
+| Mermaid CDN 不可用 | 软性阻塞 | Native 端图表不渲染 | 打包本地 mermaid.js 或降级显示 |
+| PostHog 分析不可用 | 软性阻塞 | 分析事件丢失 | 不设置 API Key 即可完全禁用 |
+| Expo Push 无法内网使用 | 功能缺失 | 手机无法收到后台推送 | WebSocket 在线通知 + 前台保活 |
+| Expo Updates 无法内网使用 | 功能缺失 | App 无法 OTA 更新 | 重新构建 APK/IPA 分发 |
+| iOS 企业签名成本 | 运维成本 | 需要 $299/年 | TestFlight 或源码编译 |
+| 内网 IP 变化 | 运维风险 | CLI/App 需要重新配置 | 使用内网 DNS 或固定 IP |
+| 端到端加密密钥管理 | 安全考量 | 用户切换设备需重新配置 | 保留原版密钥同步机制 |
+| PGlite 数据备份 | 运维风险 | 数据丢失风险 | Docker volume 备份策略 |
 
 ---
 
@@ -1194,16 +1273,26 @@ export default {
 
 | 文件 | 用途 |
 |------|------|
-| `sources/app/_layout.tsx` | Expo Router 根布局 |
+| `sources/app/_layout.tsx` | Expo Router 根布局，启动序列，DEV 凭证检查 |
 | `sources/app/(auth)/*` | 认证流程界面 |
 | `sources/app/(app)/*` | 已认证的应用界面 |
-| `sources/sync/serverConfig.ts` | 服务器配置 |
+| `sources/app/(app)/server.tsx` | 服务器地址手动配置界面 |
+| `sources/app/(app)/restore/manual.tsx` | 手动恢复认证（密钥输入） |
+| `sources/sync/serverConfig.ts` | 服务器配置（默认值 + MMKV 存储） |
 | `sources/sync/SyncSocket.ts` | WebSocket 管理 |
 | `sources/sync/SyncSession.ts` | 会话加密/解密 |
-| `sources/auth/*` | QR 码认证 |
-| `sources/sync/revenueCat/` | RevenueCat 订阅计费（待删除） |
+| `sources/sync/pushRegistration.ts` | 推送 Token 注册（需修复离线处理） |
+| `sources/hooks/useUpdates.ts` | Expo OTA 更新检查（需禁用） |
+| `sources/track/tracking.ts` | PostHog 分析（环境变量控制） |
+| `sources/components/markdown/MermaidRenderer.tsx` | Mermaid 图表渲染（CDN 依赖） |
+| `sources/auth/authQRStart.ts` | QR 认证启动 |
+| `sources/auth/authQRWait.ts` | QR 认证轮询 |
+| `sources/auth/authChallenge.ts` | Sodium 签名认证 |
+| `sources/auth/tokenStorage.ts` | Token 存储（SecureStore / localStorage） |
+| `sources/auth/AuthContext.tsx` | 认证状态管理 |
+| `sources/encryption/*` | libsodium 加密模块 |
 | `sources/realtime/` | LiveKit 语音（待删除） |
-| `sources/encryption/*` | libsodium 加密 |
+| `sources/sync/revenueCat/` | RevenueCat 订阅计费（待删除） |
 | `app.config.js` | Expo 构建配置 |
 
 ### Wire Protocol
