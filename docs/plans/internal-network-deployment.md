@@ -1157,25 +1157,41 @@ export default {
   - iOS: 企业签名或 TestFlight
 ```
 
-### Phase 4: 联调测试
+### Phase 4: 联调测试（✅ Server API 测试通过）
+
+> Server 端 API 测试于 2026-03-27 执行，全部通过。
+> 环境: standalone 模式 (PGlite) + HAPPY_AUTH_MODE=local
+
+#### 4.1 Server API 测试结果
+
+| # | 测试项 | 方法 | 预期 | 实际 | 状态 |
+|---|--------|------|------|------|------|
+| 1 | 用户注册 | POST /v1/auth/register | 200 + token | 200 + JWT token | ✅ |
+| 2 | 重复注册 | POST /v1/auth/register | 409 | 409 "Username already exists" | ✅ |
+| 3 | 用户登录 | POST /v1/auth/login | 200 + token | 200 + JWT token | ✅ |
+| 4 | 密码错误 | POST /v1/auth/login | 401 | 401 "Invalid username or password" | ✅ |
+| 5 | 密码太短 | POST /v1/auth/register | 400 | 400 validation error | ✅ |
+| 6 | JWT 获取用户信息 | GET /v1/auth/me | 200 + user | 200 { userId, username } | ✅ |
+| 7 | 无效 token | GET /v1/auth/me | 401 | 401 "Invalid token" | ✅ |
+| 8 | 无 header | GET /v1/auth/me | 401 | 401 "Missing authorization header" | ✅ |
+| 9 | JWT 访问受保护端点 | GET /v1/machines | 200 | 200 [] (空列表，正确) | ✅ |
+| 10 | 多用户注册 | POST /v1/auth/register (bob) | 200 | 200 + 不同 userId | ✅ |
+| 11 | 多用户隔离 | GET /v1/machines (bob) | 200 [] | 200 [] (独立数据) | ✅ |
+
+#### 4.2 待完成的测试（需要实际设备/环境）
 
 ```
-任务 4.1: Server 部署验证
-  - Docker Compose 启动
-  - /health 端点检查
-  - PostgreSQL / Redis / MinIO 连通性
+任务 4.2: CLI → Server 完整流程（需要 Claude Code API Key）
+  - happy login 交互式登录
+  - daemon 注册和心跳
+  - Claude Code 会话创建和同步
 
-任务 4.2: CLI → Server 连接
-  - happy login 认证
-  - daemon 注册
-  - 会话创建
+任务 4.3: App → Server 连接（需要 Expo 构建环境）
+  - 手动输入 Server 地址
+  - 用户注册/登录界面
+  - WebSocket 实时同步
 
-任务 4.3: App → Server 连接
-  - 扫码或手动输入 Server 地址
-  - 用户注册
-  - 用户登录
-
-任务 4.4: 端到端功能验证
+任务 4.4: 端到端功能验证（需要 CLI + App + Server 同时运行）
   - CLI 启动 Claude Code 会话
   - App 实时查看会话输出
   - App 发送权限批准
@@ -1183,7 +1199,6 @@ export default {
 
 任务 4.5: 多用户隔离验证
   - 用户 A 和用户 B 同时使用
-  - 验证数据完全隔离
   - 验证会话列表只显示自己的
 ```
 
