@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  happy-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3005:3005"
+    volumes:
+      - server_data:/app/data
+    environment:
+      - NODE_ENV=production
+      - PORT=3005
+      - DB_PROVIDER=pglite
+      - PGLITE_DIR=/data/pglite
+      - HAPPY_AUTH_MODE=local
+      - JWT_SECRET=${JWT_SECRET:-please-change-this-secret}
+    restart: unless-stopped
+
+volumes:
+  server_data:

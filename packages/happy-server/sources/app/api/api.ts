@@ -4,15 +4,16 @@ import { serializerCompiler, validatorCompiler, ZodTypeProvider } from "fastify-
 import { onShutdown } from "@/utils/shutdown";
 import { Fastify } from "./types";
 import { authRoutes } from "./routes/authRoutes";
+import { localAuthRoutes } from "./routes/localAuthRoutes";
 import { pushRoutes } from "./routes/pushRoutes";
 import { sessionRoutes } from "./routes/sessionRoutes";
-import { connectRoutes } from "./routes/connectRoutes";
+// import { connectRoutes } from "./routes/connectRoutes"; // Removed for internal network deployment
 import { accountRoutes } from "./routes/accountRoutes";
 import { startSocket } from "./socket";
 import { machinesRoutes } from "./routes/machinesRoutes";
 import { devRoutes } from "./routes/devRoutes";
 import { versionRoutes } from "./routes/versionRoutes";
-import { voiceRoutes } from "./routes/voiceRoutes";
+// import { voiceRoutes } from "./routes/voiceRoutes"; // Removed for internal network deployment
 import { artifactsRoutes } from "./routes/artifactsRoutes";
 import { accessKeysRoutes } from "./routes/accessKeysRoutes";
 import { enableMonitoring } from "./utils/enableMonitoring";
@@ -76,16 +77,17 @@ export async function startApi() {
 
     // Routes
     authRoutes(typed);
+    localAuthRoutes(typed);
     pushRoutes(typed);
     sessionRoutes(typed);
     accountRoutes(typed);
-    connectRoutes(typed);
+    // connectRoutes(typed); // Removed for internal network deployment
     machinesRoutes(typed);
     artifactsRoutes(typed);
     accessKeysRoutes(typed);
     devRoutes(typed);
     versionRoutes(typed);
-    voiceRoutes(typed);
+    // voiceRoutes(typed); // Removed for internal network deployment
     userRoutes(typed);
     feedRoutes(typed);
     kvRoutes(typed);

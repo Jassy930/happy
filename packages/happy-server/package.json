@@ -25,6 +25,7 @@
     "s3:init": "dotenv -e .env.dev -- docker run --rm --network container:minio --entrypoint /bin/sh minio/mc -c \"mc alias set local http://localhost:9000 $S3_ACCESS_KEY $S3_SECRET_KEY && mc mb -p local/$S3_BUCKET || true && mc anonymous set download local/$S3_BUCKET\""
   },
   "devDependencies": {
+    "@types/bcrypt": "^5.0.2",
     "@types/chalk": "^2.2.0",
     "@types/express": "^4.17.21",
     "@types/node": "^20.12.3",
@@ -46,6 +47,7 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/semver": "^7.7.0",
     "axios": "^1.6.8",
+    "bcrypt": "^5.1.1",
     "chalk": "4.1.2",
     "date-fns": "^4.1.0",
     "dotenv": "^16.4.5",
